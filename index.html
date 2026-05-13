@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Europe Tour 2025 — Planner</title>
+<title>Europe Tour 2026 — Planner</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --bg: #0a0a0f;
@@ -498,7 +499,7 @@
 <div id="lockScreen">
   <div class="lock-card">
     <div class="lock-icon">🗝️</div>
-    <div class="lock-title">Europe Tour 2025</div>
+    <div class="lock-title">Europe Tour 2026</div>
     <div class="lock-sub">Acesso restrito</div>
     <div class="lock-input-wrap">
       <input type="password" id="pwInput" placeholder="senha" onkeydown="if(event.key==='Enter')tryUnlock()" autocomplete="off" autofocus>
@@ -511,7 +512,7 @@
 <div id="appContent">
 <header class="header">
   <div class="title-block">
-    <h1>Europe Tour 2025</h1>
+    <h1>Europe Tour 2026</h1>
     <p>29 Jul – 05 Aug &nbsp;·&nbsp; Tour Planner</p>
   </div>
   <div class="rate-badge">
@@ -569,7 +570,6 @@
   </div>
 </div>
 
-<!-- CALENDAR -->
 <div class="calendar-section">
   <div class="cal-header">
     <span class="cal-title">Calendário da Tour</span>
@@ -590,15 +590,21 @@
 </div>
 
 <script>
-const TOUR_START = new Date(2025, 6, 29);
-const TOUR_END   = new Date(2025, 7, 5);
+// --- CONFIGURAÇÃO DA NUVEM (Supabase) ---
+const SUPABASE_URL = 'https://smqbpeducafyvpgcwdau.supabase.co'; 
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtcWJwZWR1Y2FmeXZwZ2N3ZGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2OTEzMDEsImV4cCI6MjA5NDI2NzMwMX0._wkgZ48-0xTybDG1dJSm8sEZV2_ETlw9Inx2N5uCO8A';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const TOUR_START = new Date(2026, 6, 29);
+const TOUR_END   = new Date(2026, 7, 5);
 const RATE_KEY = 'eurBrlRate';
 const RATE_TS_KEY = 'eurBrlTs';
-const ROWS_KEY = 'tourRows';
+const ROWS_KEY = 'tourRows'; 
 
 let eurBrl = null;
 let rows = [];
-let currentMonth = new Date(2025, 6, 1);
+let currentMonth = new Date(2026, 6, 1);
+let saveTimeout; 
 
 async function fetchRate() {
   const stored = localStorage.getItem(RATE_KEY);
@@ -630,18 +636,62 @@ function updateRateDisplay(date) {
 function fmtEur(v) { return '€ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtBrl(v) { return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
+// --- NOVAS FUNÇÕES DE NUVEM (SUPABASE) ---
+
+async function loadRows() {
+  document.getElementById('rateTime').textContent = "Carregando do Supabase...";
+  
+  try {
+    const { data, error } = await supabase
+      .from('tour_data')
+      .select('rows')
+      .eq('id', 1)
+      .single();
+      
+    if (error) throw error;
+    
+    if (data && data.rows && data.rows.length > 0) {
+      rows = data.rows;
+      localStorage.setItem(ROWS_KEY, JSON.stringify(rows)); 
+    } else {
+      addDefaultRows();
+    }
+  } catch (error) {
+    console.error("Erro ao carregar do Supabase:", error);
+    const s = localStorage.getItem(ROWS_KEY);
+    if (s) rows = JSON.parse(s);
+    if (!rows.length) addDefaultRows();
+  }
+}
+
 function saveRows() {
+  // Salva localmente primeiro para a interface continuar rápida
   localStorage.setItem(ROWS_KEY, JSON.stringify(rows));
+  
+  // Aguarda 1.5s sem digitação para enviar ao banco
+  clearTimeout(saveTimeout);
+  document.getElementById('rateTime').textContent = "Salvando na nuvem...";
+  
+  saveTimeout = setTimeout(async () => {
+    try {
+      const { error } = await supabase
+        .from('tour_data')
+        .upsert({ id: 1, rows: rows });
+        
+      if (error) throw error;
+      document.getElementById('rateTime').textContent = "Dados sincronizados ✓";
+    } catch (error) {
+      console.error("Erro ao salvar no Supabase:", error);
+      document.getElementById('rateTime').textContent = "Erro ao sincronizar ❌";
+    }
+  }, 1500);
 }
-function loadRows() {
-  const s = localStorage.getItem(ROWS_KEY);
-  if (s) rows = JSON.parse(s);
-  if (!rows.length) addDefaultRows();
-}
+
+// ------------------------------
 
 function addDefaultRows() {
   const defaults = [
-    {date:'2025-07-29',show:'',from:'',city:'',transport:'Flight',retDate:'2025-08-05',retTo:'',cost:'',cache:''},
+    {date:'2026-07-29',show:'',from:'',city:'',transport:'Flight',retDate:'2026-08-05',retTo:'',cost:'',cache:''},
   ];
   defaults.forEach(d => rows.push({...d, id: uid()}));
 }
@@ -826,7 +876,7 @@ function renderCalendar() {
 }
 
 async function init() {
-  loadRows();
+  await loadRows(); 
   renderTable();
   await fetchRate();
   updateSummary();
